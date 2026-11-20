@@ -182,6 +182,13 @@ button.item { width: 100%; background: none; border: 0; text-align: left; border
 
 .who { margin-top: 10px; display: grid; gap: 3px; opacity: .95; }
 .who i { opacity: .8; }
+.cap { display: inline-grid; place-items: center; min-width: 18px; height: 16px; padding: 0 3px; margin-left: 5px; vertical-align: 1px; border-radius: 3px;
+  background: repeating-linear-gradient(90deg, #f2b705 0 5px, #ffd54a 5px 7px); color: #2b2100; font: 800 11px/1 var(--display); border: 1px solid rgba(0,0,0,.25); }
+.slot .armband { position: absolute; top: 2px; right: 18px; width: 20px; height: 20px; border-radius: 50%; background: #f2b705; color: #2b2100; border: 2px solid #fff;
+  font: 800 11px/16px var(--display); text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,.4); }
+.captain-card { display: flex; align-items: center; gap: 12px; }
+.captain-card .badge { width: 46px; height: 46px; border-radius: 50%; background: repeating-linear-gradient(90deg, #f2b705 0 8px, #ffd54a 8px 11px); color: #2b2100;
+  display: grid; place-items: center; font: 800 24px var(--display); border: 3px solid var(--surface); box-shadow: 0 0 0 2px #f2b705; flex: none; }
 .toast { position: fixed; left: 50%; bottom: calc(86px + env(safe-area-inset-bottom)); transform: translateX(-50%); background: var(--ink); color: var(--bg);
   padding: 10px 16px; border-radius: 10px; font-weight: 600; z-index: 30; max-width: calc(100% - 32px); }
 .empty { text-align: center; padding: 22px 10px; color: var(--muted); }
@@ -212,7 +219,7 @@ button.item { width: 100%; background: none; border: 0; text-align: left; border
 <div id="modal"></div>
 
 <script>
-const APP_VERSION = "20261120002449";
+const APP_VERSION = "20261120003307";
 const SUPABASE_URL = "https://zocxfefydgdpsnhhggga.supabase.co";
 const SUPABASE_KEY = "sb_publishable_6ElWA_2glJ3sBEAhVenYEA_dnbpxW_z"; // public key, safe in the page
 const TABLE = "fives";
@@ -254,6 +261,8 @@ const team = () => rows.team || null;
 const league = () => rows.league || { name: "", teams: [] };
 const players = (all) => (team()?.players || []).filter(p => all || !p.gone).sort((a, b) => (a.num ?? 99) - (b.num ?? 99) || a.name.localeCompare(b.name));
 const player = id => (team()?.players || []).find(p => p.id === id);
+const isCap = id => !!id && team()?.captain === id;
+const cap = id => isCap(id) ? `<span class="cap" title="Captain" aria-label="Captain">C</span>` : "";
 const pname = id => id === "og" ? "Own goal" : (player(id)?.name || "Unknown");
 const games = () => Object.entries(rows).filter(([k, d]) => k.startsWith("game:") && d && !d.deleted).map(([, d]) => d).sort((a, b) => a.date.localeCompare(b.date));
 const fixtures = () => Object.entries(rows).filter(([k, d]) => k.startsWith("fix:") && d && !d.deleted).map(([, d]) => d).sort((a, b) => (a.date || "").localeCompare(b.date || ""));
@@ -327,7 +336,7 @@ function playerStats(scope) {
 function leagueScorers() {
   const titled = n => n.replace(/\b\w/g, c => c.toUpperCase());
   const others = (rows.lscorers?.rows || []).filter(r => r.t !== "us").map(r => ({ n: titled(r.n), t: r.t, g: r.g }));
-  const ours = playerStats("league").filter(x => x.G > 0).map(x => ({ n: x.p.name, t: "us", g: x.G }));
+  const ours = playerStats("league").filter(x => x.G > 0).map(x => ({ n: x.p.name, t: "us", g: x.G, id: x.p.id }));
   return [...others, ...ours].sort((a, b) => b.g - a.g || (b.t === "us") - (a.t === "us") || a.n.localeCompare(b.n));
 }
 function leagueTable() {
@@ -357,7 +366,8 @@ function render() {
   if (!loaded) return;
   const T = team();
   document.getElementById("title").firstChild.textContent = T?.name || "Five";
-  document.getElementById("subtitle").textContent = league().name ? league().name : "Your 5-a-side team";
+  const capN = player(T?.captain)?.name;
+  document.getElementById("subtitle").textContent = [league().name || "Your 5-a-side team", capN ? `Captain ${capN}` : ""].filter(Boolean).join(" · ");
   document.getElementById("crest").textContent = (T?.short || T?.name || "5").slice(0, 3).toUpperCase();
   document.querySelectorAll("nav.tabs button").forEach(b => b.classList.toggle("on", b.dataset.tab === tab));
   const v = document.getElementById("view");
@@ -386,7 +396,7 @@ function availBlock(g, inCard) {
        <div class="avail">${["in", "maybe", "out"].map(s => `<button class="${s} ${mine === s ? "on" : ""}" data-act="avail" data-g="${g.id}" data-p="${me}" data-s="${s}">${{ in: "I'm in", maybe: "Maybe", out: "Out" }[s]}</button>`).join("")}</div>
        ${mine ? `<button class="btn sm ghost" style="margin-top:8px;${ghost}" data-act="avail-note" data-g="${g.id}">${mineRow.n ? `📝 “${esc(mineRow.n)}” · edit` : "📝 Add a note (e.g. running 10 mins late)"}</button>` : ""}`
     : `<button class="btn accent block" style="margin-top:12px" data-act="pickme">Tap to say who you are</button>`;
-  const names = (k, label) => by[k].length ? `<div class="wholine"><b>${label}</b> ${by[k].map(x => esc(x.p.name) + (x.n ? ` <i>(${esc(x.n)})</i>` : "")).join(", ")}</div>` : "";
+  const names = (k, label) => by[k].length ? `<div class="wholine"><b>${label}</b> ${by[k].map(x => esc(x.p.name) + cap(x.p.id) + (x.n ? ` <i>(${esc(x.n)})</i>` : "")).join(", ")}</div>` : "";
   const need = Math.max(0, 5 - counts.in);
   return `<div class="count"><span class="pill">✅ ${counts.in} in</span><span class="pill">🤔 ${counts.maybe} maybe</span><span class="pill">❌ ${counts.out} out</span>
     <span class="pill">${need ? `Need ${need} more` : counts.in >= 6 ? "✔ Got a sub" : "✔ Got 5"}</span></div>
@@ -415,12 +425,16 @@ function homeView() {
       <div class="row" style="margin-top:10px;gap:6px;flex-wrap:wrap"><button class="btn sm" data-act="open-game" data-g="${next.id}">Game details</button><button class="btn sm" data-act="goto-sheet" data-g="${next.id}">Team sheet</button>${mapsUrl(next) ? `<a class="btn sm" href="${mapsUrl(next)}" target="_blank" rel="noopener" style="text-decoration:none;display:inline-flex;align-items:center">📍 Directions</a>` : ""}</div>${next.notes ? `<div class="small" style="margin-top:8px;opacity:.85">ℹ️ ${esc(next.notes)}</div>` : ""}
     </div>`
     : `<div class="card hero"><div class="label">Next game</div><div class="vs">Nothing booked</div><button class="btn accent" style="margin-top:10px" data-act="new-game">Add a game</button></div>`;
+  const C = player(team().captain);
+  const capCard = C && !C.gone ? `<div class="card captain-card"><span class="badge">C</span><div class="grow"><div class="small muted" style="font-weight:700;text-transform:uppercase;letter-spacing:.06em">Club captain</div>
+    <div style="font:800 24px/1.1 var(--display);text-transform:uppercase">${esc(C.name)}</div></div></div>` : "";
   h += myGamesCard();
   h += `<div class="kpis" style="margin-bottom:12px">
     <div class="kpi"><b>${pos ? ord(pos) : "–"}</b><span>in league</span></div>
     <div class="kpi"><b>${ts.W}-${ts.D}-${ts.L}</b><span>W-D-L</span></div>
     <div class="kpi"><b>${ts.GF}</b><span>scored</span></div>
     <div class="kpi"><b>${ts.CS}</b><span>clean sheets</span></div></div>`;
+  h += capCard;
   if (last) h += `<div class="card"><h2>Last result <small>${fmtDay(last.date)}</small></h2>${gameItem(last, true)}
     ${(last.goals || []).length ? `<p class="small muted" style="margin:6px 0 0">⚽ ${scorersLine(last)}</p>` : ""}
     ${last.motm ? `<p class="small" style="margin:4px 0 0">⭐ Player of the match: <b>${esc(pname(last.motm))}</b></p>` : ""}</div>`;
@@ -466,10 +480,10 @@ function sheetView() {
     <div class="pitch" id="pitch"><div class="lines"></div><div class="box t"></div><div class="box b"></div>
     ${F.map(([id, pos, x, y]) => { const p = player(lu.slots?.[id]);
       return `<button class="slot ${id === "gk" ? "gk" : ""} ${p ? "" : "empty"}" style="left:${x}%;top:${y}%" data-act="slot" data-slot="${id}" data-drop="slot:${id}" ${p ? `data-drag="${p.id}" data-from="slot:${id}"` : ""}>
-        <span class="shirt">${p ? initials(p) : "+"}</span><span class="nm">${p ? esc(p.name) : "Empty"}</span><span class="ps">${pos}</span></button>`; }).join("")}</div>`;
+        <span class="shirt">${p ? initials(p) : "+"}</span>${p && isCap(p.id) ? `<span class="armband">C</span>` : ""}<span class="nm">${p ? esc(p.name) + (isCap(p.id) ? " (C)" : "") : "Empty"}</span><span class="ps">${pos}</span></button>`; }).join("")}</div>`;
   const used = new Set([...Object.values(lu.slots || {}), ...(lu.subs || [])].filter(Boolean));
   const card = (p, from) => { const s = getAvail(g.id, p.id);
-    return `<div class="pcard ${s || ""}" data-drag="${p.id}" data-from="${from}"><span class="pc-shirt">${initials(p)}</span><span class="pc-nm">${esc(p.name)}</span><span class="pc-meta"><span class="dot ${s || ""}"></span>${p.pos !== "ANY" ? p.pos : (s ? { in: "In", maybe: "Maybe", out: "Out" }[s] : "No reply")}</span></div>`; };
+    return `<div class="pcard ${s || ""}" data-drag="${p.id}" data-from="${from}"><span class="pc-shirt">${initials(p)}</span><span class="pc-nm">${esc(p.name)}${cap(p.id)}</span><span class="pc-meta"><span class="dot ${s || ""}"></span>${p.pos !== "ANY" ? p.pos : (s ? { in: "In", maybe: "Maybe", out: "Out" }[s] : "No reply")}</span></div>`; };
   const subs = (lu.subs || []).map(id => player(id)).filter(Boolean);
   h += `<div class="card dropzone" data-drop="subs" style="margin-top:12px"><h2>Subs bench <small>rolling subs</small></h2>
     <div class="cards">${subs.map(p => card(p, "subs")).join("") || '<div class="muted small dz-hint">Drag players here</div>'}</div></div>`;
@@ -494,7 +508,7 @@ function tableView() {
     h += `<div class="card"><h2>Top scorers <small>${rows.lscorers?.asOf ? "league site, " + fmtDay(rows.lscorers.asOf + "T12:00") : ""}</small></h2><div class="scroll-x"><table class="tbl">
       <thead><tr><th>#</th><th>Player</th><th style="text-align:left">Team</th><th>Goals</th></tr></thead><tbody>
       ${sc.slice(0, showAll ? 999 : 10).map((r, i) => { if (r.g !== prev) { rank = i + 1; prev = r.g; }
-        return `<tr class="${r.t === "us" ? "us" : ""}"><td>${rank}</td><td>${esc(r.n)}</td><td style="text-align:left" class="small">${esc(teamName(r.t))}</td><td class="pts">${r.g}</td></tr>`; }).join("")}
+        return `<tr class="${r.t === "us" ? "us" : ""}"><td>${rank}</td><td>${esc(r.n)}${r.id ? cap(r.id) : ""}</td><td style="text-align:left" class="small">${esc(teamName(r.t))}</td><td class="pts">${r.g}</td></tr>`; }).join("")}
       </tbody></table></div>${sc.length > 10 ? `<button class="btn sm ghost block" style="margin-top:8px" data-act="all-scorers">${showAll ? "Show top 10" : `Show all ${sc.length}`}</button>` : ""}
       <p class="small muted" style="margin:8px 0 0">Our players come from the results in this app, so they're always right. Other teams' come from the league site.</p></div>`;
   }
@@ -537,7 +551,7 @@ function statsView() {
   ps.sort((a, b) => b[sortKey] - a[sortKey] || b.G - a.G || a.p.name.localeCompare(b.p.name));
   h += `<div class="card"><h2>Players ${scopeSeg(statScope, "pscope")}</h2><div class="scroll-x"><table class="tbl">
     <thead><tr><th>#</th><th>Player</th>${cols.map(([k, l]) => `<th class="sort ${sortKey === k ? "sorted" : ""}" data-act="sort" data-k="${k}">${l}${sortKey === k ? " ▾" : ""}</th>`).join("")}</tr></thead><tbody>
-    ${ps.map(x => `<tr><td>${esc(x.p.num ?? "")}</td><td>${esc(x.p.name)}</td>${cols.map(([k]) => `<td>${k === "wr" ? (x.apps ? x[k] + "%" : "–") : x[k]}</td>`).join("")}</tr>`).join("") || `<tr><td colspan="9" class="muted">No players yet</td></tr>`}
+    ${ps.map(x => `<tr><td>${esc(x.p.num ?? "")}</td><td>${esc(x.p.name)}${cap(x.p.id)}</td>${cols.map(([k]) => `<td>${k === "wr" ? (x.apps ? x[k] + "%" : "–") : x[k]}</td>`).join("")}</tr>`).join("") || `<tr><td colspan="9" class="muted">No players yet</td></tr>`}
     </tbody></table></div><p class="small muted" style="margin:10px 0 0">Apps come from the team sheet (or "I'm in" if no sheet was picked). CS = clean sheets in goal. Tap a column to sort.</p></div>`;
   return h;
 }
@@ -555,6 +569,7 @@ function settingsModal() {
     <div class="field"><label>Team name</label><input id="s-name" value="${esc(T.name)}" placeholder="e.g. Real Madrin't"></div>
     <div class="two"><div class="field"><label>Badge letters</label><input id="s-short" maxlength="3" value="${esc(T.short || "")}" placeholder="RMD"></div>
       <div class="field"><label>Usual formation</label><select id="s-form">${Object.keys(FORMATIONS).map(f => `<option ${T.formation === f ? "selected" : ""}>${f}</option>`).join("")}</select></div></div>
+    <div class="field"><label>Captain</label><select id="s-cap"><option value="">None</option>${(T.players || []).filter(p => !p.gone).map(p => `<option value="${p.id}" ${T.captain === p.id ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select></div>
     <h3 style="margin:8px 0">Players</h3>
     <div id="s-players" class="stack">${(T.players || []).filter(p => !p.gone).map(playerRow).join("")}</div>
     <button class="btn sm" style="margin:8px 0 18px" data-act="add-player-row">+ Add player</button>
@@ -586,7 +601,7 @@ function saveSettings() {
     return { id: r.dataset.pid, name: nm, num: n === "" ? null : Number(n), pos: r.querySelector(".ppos").value };
   }).filter(Boolean);
   for (const p of old) if (!seen.has(p.id)) list.push({ ...p, gone: true }); // keep for past stats
-  save("team", { name, short: document.getElementById("s-short").value.trim(), formation: document.getElementById("s-form").value, players: list });
+  save("team", { ...(team() || {}), name, short: document.getElementById("s-short").value.trim(), formation: document.getElementById("s-form").value, captain: document.getElementById("s-cap").value || "", players: list });
   const oldT = league().teams;
   const tseen = new Set();
   const teams = [...document.querySelectorAll("#s-teams [data-tid]")].map(r => { const nm = r.querySelector(".tname").value.trim(); if (!nm) return null; tseen.add(r.dataset.tid); return { id: r.dataset.tid, name: nm }; }).filter(Boolean);
@@ -634,7 +649,7 @@ function gameModal(id) {
   const g = rows["game:" + id]; if (!g) return closeModal();
   if (!draft || draft.id !== id) draft = { id, us: g.us ?? 0, them: g.them ?? 0, goals: [...(g.goals || [])], motm: g.motm || "" };
   const ps = players();
-  const avail = ps.map(p => `<div class="row small" style="padding:6px 0;border-top:1px solid var(--line)"><span class="grow"><b>${esc(p.name)}</b></span>
+  const avail = ps.map(p => `<div class="row small" style="padding:6px 0;border-top:1px solid var(--line)"><span class="grow"><b>${esc(p.name)}</b>${cap(p.id)}</span>
     ${["in", "maybe", "out"].map(s => `<button class="btn sm ${getAvail(g.id, p.id) === s ? "primary" : ""}" style="${getAvail(g.id, p.id) === s && s !== "in" ? `background:var(--${s});border-color:var(--${s})` : ""}" data-act="avail" data-g="${g.id}" data-p="${p.id}" data-s="${s}">${{ in: "In", maybe: "?", out: "Out" }[s]}</button>`).join("")}</div>`).join("");
   const pOpts = (sel, blank) => `${blank ? `<option value="">${blank}</option>` : ""}${ps.map(p => `<option value="${p.id}" ${sel === p.id ? "selected" : ""}>${esc(p.name)}</option>`).join("")}`;
   openModal(`<h2>v ${esc(oppName(g))} ${closeBtn}</h2>
@@ -677,7 +692,7 @@ function slotModal(slotId) {
   const cur = slotId === "sub" ? null : lu.slots?.[slotId];
   openModal(`<h2>${slotId === "sub" ? "Add a sub" : slotId === "gk" ? "In goal" : "Pick a player"} ${closeBtn}</h2>
     <div class="pick">${list.map(({ p, s }) => `<button data-act="pick" data-slot="${slotId}" data-p="${p.id}" ${used.has(p.id) && p.id !== cur ? "disabled" : ""}>
-      <span class="num">${esc(p.num ?? "")}</span><span class="grow">${esc(p.name)} <span class="small muted">${p.pos !== "ANY" ? p.pos : ""}</span></span><span class="dot ${s || ""}"></span></button>`).join("")}</div>
+      <span class="num">${esc(p.num ?? "")}</span><span class="grow">${esc(p.name)}${cap(p.id)} <span class="small muted">${p.pos !== "ANY" ? p.pos : ""}</span></span><span class="dot ${s || ""}"></span></button>`).join("")}</div>
     ${cur ? `<button class="btn ghost danger block" style="margin-top:10px" data-act="pick" data-slot="${slotId}" data-p="">Empty this spot</button>` : ""}`);
 }
 function setLineup(fn) {
@@ -769,7 +784,7 @@ document.addEventListener("click", async e => {
     const g = rows["game:" + sheetGame]; const lu = g.lineup || { formation: "1-2-1", slots: {}, subs: [] };
     const F = FORMATIONS[lu.formation] || FORMATIONS["1-2-1"];
     const lines = [`⚽ ${team().name} v ${oppName(g)}`, `${fmtDay(g.date)}, ${fmtTime(g.date)}${g.venue ? " · " + g.venue : ""}`, `Formation ${lu.formation}`, ""];
-    for (const [id, pos] of F) lines.push(`${pos}: ${player(lu.slots?.[id])?.name || "—"}`);
+    for (const [id, pos] of F) lines.push(`${pos}: ${player(lu.slots?.[id])?.name || "—"}${isCap(lu.slots?.[id]) ? " (C)" : ""}`);
     if ((lu.subs || []).length) lines.push(`Subs: ${lu.subs.map(pname).join(", ")}`);
     if (g.notes) lines.push("", g.notes);
     const text = lines.join("\n");
