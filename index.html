@@ -180,6 +180,8 @@ button.item { width: 100%; background: none; border: 0; text-align: left; border
 .pick button[disabled] { opacity: .4; }
 .pick .num { font: 800 18px var(--display); width: 28px; text-align: center; color: var(--muted); }
 
+.who { margin-top: 10px; display: grid; gap: 3px; opacity: .95; }
+.who i { opacity: .8; }
 .toast { position: fixed; left: 50%; bottom: calc(86px + env(safe-area-inset-bottom)); transform: translateX(-50%); background: var(--ink); color: var(--bg);
   padding: 10px 16px; border-radius: 10px; font-weight: 600; z-index: 30; max-width: calc(100% - 32px); }
 .empty { text-align: center; padding: 22px 10px; color: var(--muted); }
@@ -210,7 +212,7 @@ button.item { width: 100%; background: none; border: 0; text-align: left; border
 <div id="modal"></div>
 
 <script>
-const APP_VERSION = "20261120001742";
+const APP_VERSION = "20261120002105";
 const SUPABASE_URL = "https://zocxfefydgdpsnhhggga.supabase.co";
 const SUPABASE_KEY = "sb_publishable_6ElWA_2glJ3sBEAhVenYEA_dnbpxW_z"; // public key, safe in the page
 const TABLE = "fives";
@@ -369,18 +371,36 @@ function setupView() {
   <button class="btn accent block" data-act="settings">Start setting up</button>`;
 }
 
-function availBlock(g, inCard) {
-  const counts = { in: 0, maybe: 0, out: 0 };
-  players().forEach(p => { const s = getAvail(g.id, p.id); if (s) counts[s]++; });
-  const mine = me && player(me) ? getAvail(g.id, me) : null;
-  const who = me && player(me)
-    ? `<div class="row small" style="margin-top:12px"><span class="grow">Are you playing, <b>${esc(player(me).name)}</b>?</span><button class="btn sm ghost" data-act="pickme" style="${inCard ? "" : "color:#fff;border-color:rgba(255,255,255,.4)"}">Not you?</button></div>
-       <div class="avail">${["in", "maybe", "out"].map(s => `<button class="${s} ${mine === s ? "on" : ""}" data-act="avail" data-g="${g.id}" data-p="${me}" data-s="${s}">${{ in: "I'm in", maybe: "Maybe", out: "Out" }[s]}</button>`).join("")}</div>`
-    : `<button class="btn accent block" style="margin-top:12px" data-act="pickme">Tap to say who you are</button>`;
-  return `<div class="count"><span class="pill">✅ ${counts.in} in</span><span class="pill">🤔 ${counts.maybe} maybe</span><span class="pill">❌ ${counts.out} out</span>
-    ${counts.in < 5 ? `<span class="pill">Need ${5 - counts.in} more</span>` : ""}</div>${who}`;
+const AV = { in: "In", maybe: "Maybe", out: "Out" };
+function availPeople(g) {
+  const by = { in: [], maybe: [], out: [], none: [] };
+  players().forEach(p => { const r = rows[`avail:${g.id}:${p.id}`]; by[r?.s || "none"].push({ p, n: r?.s ? r.n : "" }); });
+  return by;
 }
-
+function availBlock(g, inCard) {
+  const by = availPeople(g), counts = { in: by.in.length, maybe: by.maybe.length, out: by.out.length };
+  const mineRow = me && player(me) ? rows[`avail:${g.id}:${me}`] : null, mine = mineRow?.s || null;
+  const ghost = inCard ? "" : "color:#fff;border-color:rgba(255,255,255,.4)";
+  const who = me && player(me)
+    ? `<div class="row small" style="margin-top:12px"><span class="grow">Are you playing, <b>${esc(player(me).name)}</b>?</span><button class="btn sm ghost" data-act="pickme" style="${ghost}">Not you?</button></div>
+       <div class="avail">${["in", "maybe", "out"].map(s => `<button class="${s} ${mine === s ? "on" : ""}" data-act="avail" data-g="${g.id}" data-p="${me}" data-s="${s}">${{ in: "I'm in", maybe: "Maybe", out: "Out" }[s]}</button>`).join("")}</div>
+       ${mine ? `<button class="btn sm ghost" style="margin-top:8px;${ghost}" data-act="avail-note" data-g="${g.id}">${mineRow.n ? `📝 “${esc(mineRow.n)}” · edit` : "📝 Add a note (e.g. running 10 mins late)"}</button>` : ""}`
+    : `<button class="btn accent block" style="margin-top:12px" data-act="pickme">Tap to say who you are</button>`;
+  const names = (k, label) => by[k].length ? `<div class="wholine"><b>${label}</b> ${by[k].map(x => esc(x.p.name) + (x.n ? ` <i>(${esc(x.n)})</i>` : "")).join(", ")}</div>` : "";
+  const need = Math.max(0, 5 - counts.in);
+  return `<div class="count"><span class="pill">✅ ${counts.in} in</span><span class="pill">🤔 ${counts.maybe} maybe</span><span class="pill">❌ ${counts.out} out</span>
+    <span class="pill">${need ? `Need ${need} more` : counts.in >= 6 ? "✔ Got a sub" : "✔ Got 5"}</span></div>
+    <div class="who small">${names("in", "In:")}${names("maybe", "Maybe:")}${names("out", "Out:")}${names("none", "No reply:")}</div>
+    ${by.none.length || by.maybe.length ? `<button class="btn sm ghost" style="margin-top:6px;${ghost}" data-act="chase" data-g="${g.id}">📣 Chase replies in the group chat</button>` : ""}${who}`;
+}
+function myGamesCard() {
+  if (!me || !player(me)) return "";
+  const later = upcoming().slice(1, 5); if (!later.length) return "";
+  return `<div class="card"><h2>Your next games <small>say now if you're away</small></h2>${later.map(g => { const s = getAvail(g.id, me);
+    return `<div class="row" style="padding:6px 0;border-top:1px solid var(--line)"><div class="grow small"><b>${fmtDay(g.date)}</b> v ${esc(oppName(g))}</div>
+      ${["in", "maybe", "out"].map(k => `<button class="btn sm" style="${s === k ? `background:var(--${k});border-color:var(--${k});color:#fff` : ""}" data-act="avail" data-g="${g.id}" data-p="${me}" data-s="${k}">${{ in: "In", maybe: "?", out: "Out" }[k]}</button>`).join("")}</div>`; }).join("")}</div>`;
+}
+const mapsUrl = g => { const q = (g.venue || "").replace(/·.*$/, "").trim() || league().venue || ""; return q ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}` : ""; };
 function homeView() {
   const next = upcoming()[0], last = results()[0], tbl = leagueTable(), pos = tbl.findIndex(r => r.id === "us") + 1;
   const ps = playerStats("all").sort((a, b) => b.G - a.G);
@@ -392,9 +412,10 @@ function homeView() {
       <div class="vs">v ${esc(oppName(next))}</div>
       <div class="when">${fmtDay(next.date)}, ${fmtTime(next.date)}${next.venue ? " · " + esc(next.venue) : ""}</div>
       ${availBlock(next)}
-      <div class="row" style="margin-top:10px;gap:6px"><button class="btn sm" data-act="open-game" data-g="${next.id}">Game details</button><button class="btn sm" data-act="goto-sheet" data-g="${next.id}">Team sheet</button></div>
+      <div class="row" style="margin-top:10px;gap:6px;flex-wrap:wrap"><button class="btn sm" data-act="open-game" data-g="${next.id}">Game details</button><button class="btn sm" data-act="goto-sheet" data-g="${next.id}">Team sheet</button>${mapsUrl(next) ? `<a class="btn sm" href="${mapsUrl(next)}" target="_blank" rel="noopener" style="text-decoration:none;display:inline-flex;align-items:center">📍 Directions</a>` : ""}</div>${next.notes ? `<div class="small" style="margin-top:8px;opacity:.85">ℹ️ ${esc(next.notes)}</div>` : ""}
     </div>`
     : `<div class="card hero"><div class="label">Next game</div><div class="vs">Nothing booked</div><button class="btn accent" style="margin-top:10px" data-act="new-game">Add a game</button></div>`;
+  h += myGamesCard();
   h += `<div class="kpis" style="margin-bottom:12px">
     <div class="kpi"><b>${pos ? ord(pos) : "–"}</b><span>in league</span></div>
     <div class="kpi"><b>${ts.W}-${ts.D}-${ts.L}</b><span>W-D-L</span></div>
@@ -618,7 +639,7 @@ function gameModal(id) {
   const pOpts = (sel, blank) => `${blank ? `<option value="">${blank}</option>` : ""}${ps.map(p => `<option value="${p.id}" ${sel === p.id ? "selected" : ""}>${esc(p.name)}</option>`).join("")}`;
   openModal(`<h2>v ${esc(oppName(g))} ${closeBtn}</h2>
     <p class="muted" style="margin-top:-6px">${fmtDay(g.date)}, ${fmtTime(g.date)} · <span class="tag ${g.type}">${g.type}</span>${g.venue ? " · " + esc(g.venue) : ""}${g.notes ? `<br>${esc(g.notes)}` : ""}</p>
-    <div class="row" style="gap:6px;margin-bottom:14px"><button class="btn sm" data-act="edit-game" data-g="${g.id}">Edit details</button><button class="btn sm" data-act="goto-sheet" data-g="${g.id}">Team sheet</button></div>
+    <div class="row" style="gap:6px;margin-bottom:14px"><button class="btn sm" data-act="edit-game" data-g="${g.id}">Edit details</button><button class="btn sm" data-act="goto-sheet" data-g="${g.id}">Team sheet</button>${mapsUrl(g) ? `<a class="btn sm" href="${mapsUrl(g)}" target="_blank" rel="noopener" style="text-decoration:none;display:inline-flex;align-items:center">📍 Directions</a>` : ""}</div>
     <h3 style="margin-bottom:6px">Score</h3>
     <div class="card"><div class="scoreline">
       <div><div class="tn">${esc(team().name)}</div><div class="stepper"><button data-act="sc" data-k="us" data-d="-1">−</button><b>${draft.us}</b><button data-act="sc" data-k="us" data-d="1">+</button></div></div>
@@ -681,8 +702,24 @@ document.addEventListener("click", async e => {
   if (a === "set-me") { setMe(d.p); closeModal(); render(); return; }
   if (a === "avail") {
     const key = `avail:${d.g}:${d.p}`; const cur = rows[key]?.s;
-    await save(key, { s: cur === d.s ? null : d.s, at: new Date().toISOString() });
+    await save(key, { ...(rows[key] || {}), s: cur === d.s ? null : d.s, at: new Date().toISOString() });
     if (modal.innerHTML && document.querySelector('[data-act="save-score"]')) gameModal(d.g);
+    return;
+  }
+  if (a === "avail-note") {
+    const key = `avail:${d.g}:${me}`; const cur = rows[key] || {};
+    const n = prompt("Add a short note for the lads (leave empty to remove)", cur.n || ""); if (n === null) return;
+    return save(key, { ...cur, n: n.trim().slice(0, 60) });
+  }
+  if (a === "chase") {
+    const g = rows["game:" + d.g], by = availPeople(g);
+    const lines = [`⚽ ${fmtDay(g.date)} ${fmtTime(g.date)} v ${oppName(g)}: ${by.in.length} in so far.`];
+    if (by.none.length) lines.push(`Still need to hear from: ${by.none.map(x => x.p.name).join(", ")}`);
+    if (by.maybe.length) lines.push(`Maybes, let us know: ${by.maybe.map(x => x.p.name).join(", ")}`);
+    lines.push(`Reply here: ${location.origin + location.pathname}`);
+    const text = lines.join("\n");
+    try { if (navigator.share) await navigator.share({ text }); else { await navigator.clipboard.writeText(text); toast("Copied, paste it in the group chat"); } }
+    catch (err) { try { await navigator.clipboard.writeText(text); toast("Copied"); } catch (e2) {} }
     return;
   }
   if (a === "new-game") return gameFormModal();
