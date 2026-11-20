@@ -137,11 +137,26 @@ button.item { width: 100%; background: none; border: 0; text-align: left; border
 .slot .shirt { width: 54px; height: 54px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center;
   font: 800 22px var(--display); box-shadow: 0 3px 8px rgba(0,0,0,.3); border: 3px solid #fff; }
 .slot.gk .shirt { background: #fff; color: var(--pitch); }
-.slot.empty .nm { background: rgba(0,0,0,.3); }
+.slot.empty .nm { background: rgba(0,0,0,.3); color: rgba(255,255,255,.85); }
 .slot.empty .shirt { background: rgba(255,255,255,.15); border-style: dashed; color: #fff; }
 .slot .nm { font-weight: 700; font-size: 14px; background: rgba(0,0,0,.45); padding: 2px 8px; border-radius: 6px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .slot .ps { font-size: 11px; font-weight: 700; opacity: .85; letter-spacing: .06em; }
 .bench { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.slot, .pcard { touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 8px; min-height: 60px; }
+.pcard { display: grid; justify-items: center; gap: 3px; padding: 10px 4px 8px; border-radius: 12px; background: linear-gradient(160deg, #1d7a46, #0e5a32); color: #fff;
+  border: 2px solid rgba(255,255,255,.15); cursor: grab; text-align: center; }
+.pcard.in { border-color: var(--accent); }
+.pcard.out { opacity: .55; }
+.pc-shirt { width: 40px; height: 40px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; font: 800 17px var(--display); }
+.pc-nm { font-weight: 700; font-size: 14px; line-height: 1.1; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pc-meta { display: flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 700; opacity: .85; text-transform: uppercase; }
+.dz-hint { grid-column: 1 / -1; text-align: center; padding: 16px 0; border: 2px dashed var(--line); border-radius: 10px; }
+.drag-ghost { position: fixed; z-index: 50; pointer-events: none; transform: translate(-50%, -60%) scale(1.08); opacity: .95; box-shadow: 0 10px 24px rgba(0,0,0,.35); border-radius: 12px; }
+.dragging-src { opacity: .3; }
+.drop-hover { outline: 3px solid var(--accent); outline-offset: 2px; }
+.slot.drop-hover { outline: none; }
+.slot.drop-hover .shirt { transform: scale(1.15); box-shadow: 0 0 0 4px var(--accent); }
 .chip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--line); font-weight: 600; font-size: 14px; }
 .chip .x { border: 0; background: none; padding: 0 2px; color: var(--muted); font-size: 16px; line-height: 1; }
 .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; flex: none; background: var(--line); }
@@ -195,7 +210,7 @@ button.item { width: 100%; background: none; border: 0; text-align: left; border
 <div id="modal"></div>
 
 <script>
-const APP_VERSION = "20261120000000";
+const APP_VERSION = "20261120001229";
 const SUPABASE_URL = "https://zocxfefydgdpsnhhggga.supabase.co";
 const SUPABASE_KEY = "sb_publishable_6ElWA_2glJ3sBEAhVenYEA_dnbpxW_z"; // public key, safe in the page
 const TABLE = "fives";
@@ -218,7 +233,7 @@ async function load() {
     for (const k of pending) if (k in rows) next[k] = rows[k];
     const changed = JSON.stringify(next) !== JSON.stringify(rows);
     rows = next; online = true;
-    if (!loaded || changed) { loaded = true; render(); }
+    if (!loaded || (changed && !drag)) { loaded = true; render(); }
   } catch (e) { online = false; if (!loaded) { loaded = true; render(); } }
 }
 async function save(key, data) {
@@ -269,11 +284,11 @@ function toast(msg) {
 
 /* ---------- formations ---------- */
 const FORMATIONS = {
-  "2-2":   [["gk", "GK", 50, 87], ["s1", "DEF", 27, 66], ["s2", "DEF", 73, 66], ["s3", "FWD", 27, 30], ["s4", "FWD", 73, 30]],
-  "1-2-1": [["gk", "GK", 50, 87], ["s1", "DEF", 50, 69], ["s2", "MID", 20, 48], ["s3", "MID", 80, 48], ["s4", "FWD", 50, 24]],
-  "2-1-1": [["gk", "GK", 50, 87], ["s1", "DEF", 27, 68], ["s2", "DEF", 73, 68], ["s3", "MID", 50, 47], ["s4", "FWD", 50, 23]],
-  "1-1-2": [["gk", "GK", 50, 87], ["s1", "DEF", 50, 69], ["s2", "MID", 50, 49], ["s3", "FWD", 27, 25], ["s4", "FWD", 73, 25]],
-  "3-1":   [["gk", "GK", 50, 87], ["s1", "DEF", 18, 63], ["s2", "DEF", 50, 68], ["s3", "DEF", 82, 63], ["s4", "FWD", 50, 28]],
+  "2-2":   [["gk", "GK", 50, 88], ["s1", "DEF", 26, 63], ["s2", "DEF", 74, 63], ["s3", "FWD", 26, 22], ["s4", "FWD", 74, 22]],
+  "1-2-1": [["gk", "GK", 50, 88], ["s1", "DEF", 50, 64], ["s2", "MID", 18, 43], ["s3", "MID", 82, 43], ["s4", "FWD", 50, 18]],
+  "2-1-1": [["gk", "GK", 50, 88], ["s1", "DEF", 26, 64], ["s2", "DEF", 74, 64], ["s3", "MID", 50, 42], ["s4", "FWD", 50, 18]],
+  "1-1-2": [["gk", "GK", 50, 88], ["s1", "DEF", 50, 64], ["s2", "MID", 50, 42], ["s3", "FWD", 24, 19], ["s4", "FWD", 76, 19]],
+  "3-1":   [["gk", "GK", 50, 88], ["s1", "DEF", 16, 60], ["s2", "DEF", 50, 64], ["s3", "DEF", 84, 60], ["s4", "FWD", 50, 22]],
 };
 
 /* ---------- stats ---------- */
@@ -419,16 +434,22 @@ function sheetView() {
   const opts = [...up, ...results()].map(x => `<option value="${x.id}" ${x.id === g.id ? "selected" : ""}>${fmtDay(x.date)} v ${esc(oppName(x))}</option>`).join("");
   let h = `<div class="card"><div class="field" style="margin-bottom:10px"><label>Game</label><select data-act="sheet-game">${opts}</select></div>
     <div class="field" style="margin:0"><label>Formation</label><div class="seg" style="display:flex">${Object.keys(FORMATIONS).map(f => `<button class="${lu.formation === f ? "on" : ""}" style="flex:1" data-act="formation" data-f="${f}">${f}</button>`).join("")}</div></div></div>`;
-  h += `<div class="pitch"><div class="lines"></div><div class="box t"></div><div class="box b"></div>
+  const initials = p => esc(p.num ?? p.name.split(/\s+/).map(w => w[0]).join("").slice(0, 2).toUpperCase());
+  h += `<p class="small muted" style="margin:0 0 8px;text-align:center">Drag players onto the pitch, bench or back to the squad. Tap a spot to pick from a list.</p>
+    <div class="pitch" id="pitch"><div class="lines"></div><div class="box t"></div><div class="box b"></div>
     ${F.map(([id, pos, x, y]) => { const p = player(lu.slots?.[id]);
-      return `<button class="slot ${id === "gk" ? "gk" : ""} ${p ? "" : "empty"}" style="left:${x}%;top:${y}%" data-act="slot" data-slot="${id}">
-        <span class="shirt">${p ? esc(p.num ?? p.name[0]) : "+"}</span><span class="nm">${p ? esc(p.name) : "Pick"}</span><span class="ps">${pos}</span></button>`; }).join("")}</div>`;
+      return `<button class="slot ${id === "gk" ? "gk" : ""} ${p ? "" : "empty"}" style="left:${x}%;top:${y}%" data-act="slot" data-slot="${id}" data-drop="slot:${id}" ${p ? `data-drag="${p.id}" data-from="slot:${id}"` : ""}>
+        <span class="shirt">${p ? initials(p) : "+"}</span><span class="nm">${p ? esc(p.name) : "Empty"}</span><span class="ps">${pos}</span></button>`; }).join("")}</div>`;
+  const used = new Set([...Object.values(lu.slots || {}), ...(lu.subs || [])].filter(Boolean));
+  const card = (p, from) => { const s = getAvail(g.id, p.id);
+    return `<div class="pcard ${s || ""}" data-drag="${p.id}" data-from="${from}"><span class="pc-shirt">${initials(p)}</span><span class="pc-nm">${esc(p.name)}</span><span class="pc-meta"><span class="dot ${s || ""}"></span>${p.pos !== "ANY" ? p.pos : (s ? { in: "In", maybe: "Maybe", out: "Out" }[s] : "No reply")}</span></div>`; };
   const subs = (lu.subs || []).map(id => player(id)).filter(Boolean);
-  h += `<div class="card" style="margin-top:12px"><h2>Subs <small>rolling</small></h2><div class="bench">
-    ${subs.map(p => `<span class="chip">${esc(p.name)}<button class="x" data-act="unsub" data-p="${p.id}" aria-label="Remove ${esc(p.name)}">×</button></span>`).join("")}
-    <button class="chip" data-act="slot" data-slot="sub">+ Add sub</button></div></div>`;
-  const avail = players().map(p => ({ p, s: getAvail(g.id, p.id) }));
-  h += `<div class="card"><h2>Who's available</h2>${avail.map(({ p, s }) => `<div class="row small" style="padding:4px 0"><span class="dot ${s || ""}"></span><span class="grow">${esc(p.name)}</span><span class="muted">${s ? { in: "In", maybe: "Maybe", out: "Out" }[s] : "No reply"}</span></div>`).join("") || '<div class="muted">No players yet</div>'}</div>`;
+  h += `<div class="card dropzone" data-drop="subs" style="margin-top:12px"><h2>Subs bench <small>rolling subs</small></h2>
+    <div class="cards">${subs.map(p => card(p, "subs")).join("") || '<div class="muted small dz-hint">Drag players here</div>'}</div></div>`;
+  const order = { in: 0, maybe: 1, null: 2, undefined: 2, out: 3 };
+  const squad = players().filter(p => !used.has(p.id)).sort((a, b) => order[getAvail(g.id, a.id)] - order[getAvail(g.id, b.id)] || a.name.localeCompare(b.name));
+  h += `<div class="card dropzone" data-drop="squad"><h2>Squad <small>${squad.length} not picked</small></h2>
+    <div class="cards">${squad.map(p => card(p, "squad")).join("") || '<div class="muted small dz-hint">Everyone is picked</div>'}</div></div>`;
   h += `<div class="row" style="gap:8px"><button class="btn accent grow" data-act="share-sheet">Copy team sheet</button><button class="btn ghost" data-act="clear-sheet">Clear</button></div>`;
   return h;
 }
@@ -715,6 +736,59 @@ document.addEventListener("change", e => {
   if (a === "motm") draft.motm = el.value;
 });
 window.addEventListener("hashchange", () => { const t = location.hash.slice(1); if (t && t !== tab) { tab = t; render(); } });
+
+/* ---------- drag and drop (team sheet) ---------- */
+let drag = null, justDragged = 0;
+function moveLineup(pid, from, to) {
+  if (!pid || from === to) return;
+  setLineup(lu => {
+    lu.slots = lu.slots || {}; lu.subs = lu.subs || [];
+    const take = loc => { if (loc.startsWith("slot:")) lu.slots[loc.slice(5)] = null; else if (loc === "subs") lu.subs = lu.subs.filter(x => x !== pid); };
+    const put = (loc, id) => { if (loc.startsWith("slot:")) lu.slots[loc.slice(5)] = id; else if (loc === "subs" && !lu.subs.includes(id)) lu.subs.push(id); };
+    take(from);
+    if (to.startsWith("slot:")) {
+      const occ = lu.slots[to.slice(5)];
+      put(to, pid);
+      if (occ && occ !== pid) put(from, occ); // swap: the player you dropped onto goes where yours came from
+    } else put(to, pid);
+  });
+}
+document.addEventListener("pointerdown", e => {
+  const src = e.target.closest("[data-drag]"); if (!src || e.button > 0) return;
+  drag = { pid: src.dataset.drag, from: src.dataset.from, src, x: e.clientX, y: e.clientY, ghost: null, over: null };
+});
+document.addEventListener("pointermove", e => {
+  if (!drag) return;
+  if (!drag.ghost) {
+    if (Math.hypot(e.clientX - drag.x, e.clientY - drag.y) < 8) return;
+    const p = player(drag.pid);
+    drag.ghost = document.createElement("div"); drag.ghost.className = "pcard drag-ghost";
+    drag.ghost.innerHTML = drag.src.classList.contains("pcard") ? drag.src.innerHTML : `<span class="pc-shirt">${esc(p?.num ?? p?.name?.[0] ?? "")}</span><span class="pc-nm">${esc(p?.name || "")}</span>`;
+    drag.ghost.style.width = "96px"; document.body.append(drag.ghost); drag.src.classList.add("dragging-src");
+  }
+  e.preventDefault();
+  drag.ghost.style.left = e.clientX + "px"; drag.ghost.style.top = e.clientY + "px";
+  // scroll the page when the finger is near the top or bottom, so the bench and squad are reachable from the pitch
+  const edge = 90; drag.vy = e.clientY < edge ? -14 : e.clientY > innerHeight - edge - 70 ? 14 : 0; drag.cx = e.clientX; drag.cy = e.clientY;
+  if (drag.vy && !drag.timer) drag.timer = setInterval(() => {
+    if (!drag || !drag.vy) return; scrollBy(0, drag.vy);
+    const t = document.elementFromPoint(drag.cx, drag.cy)?.closest("[data-drop]");
+    if (t !== drag.over) { drag.over?.classList.remove("drop-hover"); t?.classList.add("drop-hover"); drag.over = t; }
+  }, 16);
+  const t = document.elementFromPoint(e.clientX, e.clientY)?.closest("[data-drop]");
+  if (t !== drag.over) { drag.over?.classList.remove("drop-hover"); t?.classList.add("drop-hover"); drag.over = t; }
+}, { passive: false });
+function endDrag(e, cancel) {
+  if (!drag) return;
+  const d = drag; drag = null; clearInterval(d.timer);
+  if (!d.ghost) return; // it was a tap, let the click handler deal with it
+  d.ghost.remove(); d.src.classList.remove("dragging-src"); d.over?.classList.remove("drop-hover");
+  justDragged = Date.now();
+  if (!cancel && d.over) moveLineup(d.pid, d.from, d.over.dataset.drop);
+}
+document.addEventListener("pointerup", e => endDrag(e, false));
+document.addEventListener("pointercancel", e => endDrag(e, true));
+document.addEventListener("click", e => { if (Date.now() - justDragged < 400) { e.stopImmediatePropagation(); e.preventDefault(); } }, true);
 
 /* ---------- start ---------- */
 async function checkVersion() {
