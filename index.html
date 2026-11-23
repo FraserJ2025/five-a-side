@@ -219,7 +219,7 @@ button.item { width: 100%; background: none; border: 0; text-align: left; border
 <div id="modal"></div>
 
 <script>
-const APP_VERSION = "20261123215156";
+const APP_VERSION = "20261123221936";
 const SUPABASE_URL = "https://zocxfefydgdpsnhhggga.supabase.co";
 const SUPABASE_KEY = "sb_publishable_6ElWA_2glJ3sBEAhVenYEA_dnbpxW_z"; // public key, safe in the page
 const TABLE = "fives";
@@ -920,7 +920,7 @@ document.addEventListener("click", e => { if (Date.now() - justDragged < 400) { 
 
 /* ---------- start ---------- */
 async function checkVersion() {
-  try { const r = await fetch("version.json?t=" + Date.now(), { cache: "no-store" }); const v = (await r.json()).v; if (v && v !== APP_VERSION) location.reload(); } catch (e) {}
+  try { const r = await fetch("version.json?t=" + Date.now(), { cache: "no-store" }); const v = (await r.json()).v; if (v && v !== APP_VERSION && !location.search.includes("v=" + v)) location.replace(location.pathname + "?v=" + v + location.hash); } catch (e) {}
 }
 load();
 setInterval(() => { if (document.visibilityState === "visible" && !modal.innerHTML) load(); }, 20000);
