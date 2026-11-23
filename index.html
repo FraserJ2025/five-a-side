@@ -219,7 +219,7 @@ button.item { width: 100%; background: none; border: 0; text-align: left; border
 <div id="modal"></div>
 
 <script>
-const APP_VERSION = "20261120003307";
+const APP_VERSION = "20261123214933";
 const SUPABASE_URL = "https://zocxfefydgdpsnhhggga.supabase.co";
 const SUPABASE_KEY = "sb_publishable_6ElWA_2glJ3sBEAhVenYEA_dnbpxW_z"; // public key, safe in the page
 const TABLE = "fives";
@@ -328,7 +328,7 @@ function playerStats(scope) {
     const ids = lineupIds(g);
     for (const id of ids) if (st[id]) { st[id].apps++; if (outcome(g) === "W") st[id].W++; }
     for (const gl of g.goals || []) { if (st[gl.pid]) st[gl.pid].G++; if (gl.a && st[gl.a]) st[gl.a].A++; }
-    if (g.motm && st[g.motm]) st[g.motm].motm++;
+    const m = motmOf(g); if (m && st[m]) st[m].motm++;
     const gk = g.lineup?.slots?.gk; if (g.them === 0 && gk && st[gk]) st[gk].cs++;
   }
   return Object.values(st).filter(x => !x.p.gone || x.apps);
@@ -437,7 +437,8 @@ function homeView() {
   h += capCard;
   if (last) h += `<div class="card"><h2>Last result <small>${fmtDay(last.date)}</small></h2>${gameItem(last, true)}
     ${(last.goals || []).length ? `<p class="small muted" style="margin:6px 0 0">⚽ ${scorersLine(last)}</p>` : ""}
-    ${last.motm ? `<p class="small" style="margin:4px 0 0">⭐ Player of the match: <b>${esc(pname(last.motm))}</b></p>` : ""}</div>`;
+    ${motmOf(last) ? `<p class="small" style="margin:4px 0 0">⭐ Player of the match: <b>${esc(pname(motmOf(last)))}</b></p>` : ""}</div>`;
+  if (last) h += voteCard(last);
   h += `<div class="card"><h2>Form <small>last 5</small></h2><div class="row"><div class="form grow">${ts.form.length ? ts.form.map(o => `<span class="res ${o}">${o}</span>`).join("") : '<span class="muted">No results yet</span>'}</div>
     ${top ? `<span class="small">Top scorer <b>${esc(top.p.name)}</b> (${top.G})</span>` : ""}</div></div>`;
   return h;
@@ -445,6 +446,55 @@ function homeView() {
 function scorersLine(g) {
   const c = {}; (g.goals || []).forEach(x => c[x.pid] = (c[x.pid] || 0) + 1);
   return Object.entries(c).map(([id, n]) => esc(pname(id)) + (n > 1 ? ` ×${n}` : "")).join(", ");
+}
+
+/* ---------- man of the match vote ---------- */
+// One vote per player per game (key vote:<game>:<voter>), changeable until the vote closes.
+// The vote closes when the next game kicks off, or 7 days after this one.
+function voteClosesAt(g) {
+  const nxt = games().find(x => x.date > g.date);
+  const week = new Date(new Date(g.date).getTime() + 7 * 864e5);
+  return nxt && new Date(nxt.date) < week ? new Date(nxt.date) : week;
+}
+const voteOpen = g => played(g) && new Date() < voteClosesAt(g);
+function voteTally(g) {
+  const t = {}; let n = 0;
+  for (const [k, d] of Object.entries(rows)) if (k.startsWith(`vote:${g.id}:`) && d && d.v) { t[d.v] = (t[d.v] || 0) + 1; n++; }
+  return { t, n };
+}
+function voteLeaders(g) {
+  const { t } = voteTally(g), max = Math.max(0, ...Object.values(t));
+  return max ? Object.keys(t).filter(id => t[id] === max) : [];
+}
+// The captain's pick wins; otherwise a closed vote with a single leader decides it.
+function motmOf(g) {
+  if (g.motm) return g.motm;
+  if (!played(g) || voteOpen(g)) return "";
+  const l = voteLeaders(g); return l.length === 1 ? l[0] : "";
+}
+function voteCard(g) {
+  if (!g || !played(g)) return "";
+  const open = voteOpen(g), { t, n } = voteTally(g), ids = [...lineupIds(g)].filter(id => player(id));
+  if (!ids.length) return "";
+  const lead = voteLeaders(g), mine = me ? rows[`vote:${g.id}:${me}`]?.v || "" : "";
+  const iPlayed = me && player(me);
+  const closes = voteClosesAt(g);
+  let h = `<div class="card"><h2>⭐ Man of the match vote <small>${open ? `closes ${fmtDay(closes.toISOString())}` : "closed"}</small></h2>`;
+  if (g.motm) h += `<p class="small" style="margin:0 0 8px">Captain's pick: <b>${esc(pname(g.motm))}</b>. The vote is just for fun.</p>`;
+  else if (!open) h += `<p class="small" style="margin:0 0 8px">${lead.length === 1 ? `Winner: <b>${esc(pname(lead[0]))}</b>` : lead.length ? `Tie: ${lead.map(id => esc(pname(id))).join(" and ")}` : "No votes this week."}</p>`;
+  else if (!iPlayed) h += `<button class="btn accent block" style="margin-bottom:8px" data-act="pickme">Tap to say who you are, then vote</button>`;
+  else h += `<p class="small muted" style="margin:0 0 8px">${mine ? `You voted for <b>${esc(pname(mine))}</b>. Tap another name to change it.` : `Who was best v ${esc(oppName(g))}? You can't vote for yourself.`}</p>`;
+  const max = Math.max(1, ...Object.values(t));
+  h += ids.sort((a, b) => (t[b] || 0) - (t[a] || 0) || pname(a).localeCompare(pname(b))).map(id => {
+    const c = t[id] || 0, canVote = open && iPlayed && id !== me;
+    return `<div class="row" style="padding:6px 0;border-top:1px solid var(--line);gap:8px">
+      <div class="grow small"><b>${esc(pname(id))}</b>${cap(id)}${lead.includes(id) && c ? " 👑" : ""}
+        <div style="height:6px;border-radius:3px;background:var(--line);margin-top:4px"><div style="height:6px;border-radius:3px;width:${Math.round(c / max * 100)}%;background:var(--accent, #f5b301)"></div></div></div>
+      <span class="small" style="min-width:52px;text-align:right">${c} vote${c === 1 ? "" : "s"}</span>
+      ${canVote ? `<button class="btn sm ${mine === id ? "primary" : ""}" data-act="vote" data-g="${g.id}" data-v="${id}">${mine === id ? "Voted" : "Vote"}</button>` : ""}</div>`;
+  }).join("");
+  h += `<p class="small muted" style="margin:8px 0 0">${n} vote${n === 1 ? "" : "s"} in${open ? ". The winner counts towards MOTM in Stats unless the captain picks one." : ""}</p></div>`;
+  return h;
 }
 function gameItem(g, flat) {
   const d = new Date(g.date);
@@ -720,6 +770,13 @@ document.addEventListener("click", async e => {
     await save(key, { ...(rows[key] || {}), s: cur === d.s ? null : d.s, at: new Date().toISOString() });
     if (modal.innerHTML && document.querySelector('[data-act="save-score"]')) gameModal(d.g);
     return;
+  }
+  if (a === "vote") {
+    const g = rows["game:" + d.g];
+    if (!me || !player(me)) return pickMeModal();
+    if (!g || !voteOpen(g)) { toast("Voting has closed for this game"); return render(); }
+    if (d.v === me) { toast("You can't vote for yourself"); return; }
+    return save(`vote:${d.g}:${me}`, { v: d.v, at: new Date().toISOString() });
   }
   if (a === "avail-note") {
     const key = `avail:${d.g}:${me}`; const cur = rows[key] || {};
