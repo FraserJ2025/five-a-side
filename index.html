@@ -219,7 +219,7 @@ button.item { width: 100%; background: none; border: 0; text-align: left; border
 <div id="modal"></div>
 
 <script>
-const APP_VERSION = "20261123214933";
+const APP_VERSION = "20261123215156";
 const SUPABASE_URL = "https://zocxfefydgdpsnhhggga.supabase.co";
 const SUPABASE_KEY = "sb_publishable_6ElWA_2glJ3sBEAhVenYEA_dnbpxW_z"; // public key, safe in the page
 const TABLE = "fives";
@@ -438,9 +438,9 @@ function homeView() {
   if (last) h += `<div class="card"><h2>Last result <small>${fmtDay(last.date)}</small></h2>${gameItem(last, true)}
     ${(last.goals || []).length ? `<p class="small muted" style="margin:6px 0 0">⚽ ${scorersLine(last)}</p>` : ""}
     ${motmOf(last) ? `<p class="small" style="margin:4px 0 0">⭐ Player of the match: <b>${esc(pname(motmOf(last)))}</b></p>` : ""}</div>`;
-  if (last) h += voteCard(last);
   h += `<div class="card"><h2>Form <small>last 5</small></h2><div class="row"><div class="form grow">${ts.form.length ? ts.form.map(o => `<span class="res ${o}">${o}</span>`).join("") : '<span class="muted">No results yet</span>'}</div>
     ${top ? `<span class="small">Top scorer <b>${esc(top.p.name)}</b> (${top.G})</span>` : ""}</div></div>`;
+  if (last) h += voteCard(last);
   return h;
 }
 function scorersLine(g) {
@@ -479,11 +479,13 @@ function voteCard(g) {
   const lead = voteLeaders(g), mine = me ? rows[`vote:${g.id}:${me}`]?.v || "" : "";
   const iPlayed = me && player(me);
   const closes = voteClosesAt(g);
-  let h = `<div class="card"><h2>⭐ Man of the match vote <small>${open ? `closes ${fmtDay(closes.toISOString())}` : "closed"}</small></h2>`;
+  let h = `<div class="card" style="border:2px solid var(--accent)"><h2>⭐ Vote: Man of the Match</h2>
+    <p style="margin:0 0 4px;font-weight:700">${fmtDay(g.date)} v ${esc(oppName(g))} · ${g.us}–${g.them}</p>
+    <p class="small muted" style="margin:0 0 10px">${open ? `Pick who played best. One vote each, not yourself. Voting closes <b>${fmtDay(closes.toISOString())}</b>.` : "Voting has closed."}</p>`;
   if (g.motm) h += `<p class="small" style="margin:0 0 8px">Captain's pick: <b>${esc(pname(g.motm))}</b>. The vote is just for fun.</p>`;
   else if (!open) h += `<p class="small" style="margin:0 0 8px">${lead.length === 1 ? `Winner: <b>${esc(pname(lead[0]))}</b>` : lead.length ? `Tie: ${lead.map(id => esc(pname(id))).join(" and ")}` : "No votes this week."}</p>`;
   else if (!iPlayed) h += `<button class="btn accent block" style="margin-bottom:8px" data-act="pickme">Tap to say who you are, then vote</button>`;
-  else h += `<p class="small muted" style="margin:0 0 8px">${mine ? `You voted for <b>${esc(pname(mine))}</b>. Tap another name to change it.` : `Who was best v ${esc(oppName(g))}? You can't vote for yourself.`}</p>`;
+  else h += mine ? `<p class="small" style="margin:0 0 8px">✅ You voted for <b>${esc(pname(mine))}</b>. Tap another name to change it.</p>` : `<p class="small" style="margin:0 0 8px"><b>Tap Vote next to your pick.</b></p>`;
   const max = Math.max(1, ...Object.values(t));
   h += ids.sort((a, b) => (t[b] || 0) - (t[a] || 0) || pname(a).localeCompare(pname(b))).map(id => {
     const c = t[id] || 0, canVote = open && iPlayed && id !== me;
